@@ -65,3 +65,15 @@ def test_invalid_body_returns_422():
 
     assert client.post("/requests", json={"user_id": ""}).status_code == 422
     assert client.post("/requests", json={"timestamp": 0}).status_code == 422
+
+
+def test_infinite_timestamp_returns_422():
+    client = make_client()
+
+    response = client.post(
+        "/requests",
+        content='{"user_id": "user1", "timestamp": 1e999}',
+        headers={"Content-Type": "application/json"},
+    )
+
+    assert response.status_code == 422

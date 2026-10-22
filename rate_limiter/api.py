@@ -1,7 +1,7 @@
 import time
 
 from fastapi import FastAPI, HTTPException, Response, status
-from pydantic import BaseModel, Field, FiniteFloat
+from pydantic import BaseModel, Field
 
 from rate_limiter.config import load_capacity, load_leak_rate
 from rate_limiter.core import allow_request, create_rate_limiter, get_bucket_state
@@ -11,7 +11,7 @@ class RequestIn(BaseModel):
     """Body of POST /requests."""
 
     user_id: str = Field(min_length=1)
-    timestamp: FiniteFloat | None = None
+    timestamp: float | None = None
 
 
 class DecisionOut(BaseModel):
@@ -39,7 +39,12 @@ def create_app(capacity: float, leak_rate: float) -> FastAPI:
     @app.post("/requests", response_model=DecisionOut)
     async def check_request(body: RequestIn, response: Response) -> DecisionOut:
         timestamp = body.timestamp if body.timestamp is not None else time.time()
-        allowed, new_limiter = allow_request(app.state.limiter, body.user_id, timestamp)
+        try:
+            allowed, new_limiter = allow_request(
+                app.state.limiter, body.user_id, timestamp
+            )
+        except ValueError as error:
+            raise HTTPException(status_code=422, detail=str(error)) from error
         app.state.limiter = new_limiter
         if not allowed:
             response.status_code = status.HTTP_429_TOO_MANY_REQUESTS
