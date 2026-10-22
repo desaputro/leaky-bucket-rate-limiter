@@ -1,6 +1,13 @@
+from dataclasses import FrozenInstanceError
+
 import pytest
 
-from rate_limiter.core import allow_request, create_rate_limiter
+from rate_limiter.core import (
+    Bucket,
+    allow_request,
+    create_rate_limiter,
+    get_bucket_state,
+)
 
 
 def test_create_rate_limiter_sets_config():
@@ -102,3 +109,49 @@ def test_zero_leak_rate_never_drains():
 
     results, limiter = send_requests(limiter, "user1", [0, 0, 0, 0, 0, 1000])
     assert results == [True, True, True, True, True, False]
+
+
+def test_users_have_independent_buckets():
+    limiter = create_rate_limiter(5, 1.0)
+
+    user1_results, limiter = send_requests(limiter, "user1", [0, 0, 0, 0, 0, 0])
+    user2_allowed, limiter = allow_request(limiter, "user2", 0)
+
+    assert user1_results[-1] is False
+    assert user2_allowed is True
+    assert limiter.buckets["user1"].level == 5
+    assert limiter.buckets["user2"].level == 1
+
+
+def test_get_bucket_state_returns_none_for_unknown_user():
+    limiter = create_rate_limiter(5, 1.0)
+
+    assert get_bucket_state(limiter, "nobody") is None
+
+
+def test_get_bucket_state_returns_bucket_after_request():
+    limiter = create_rate_limiter(5, 1.0)
+
+    _, limiter = allow_request(limiter, "user1", 10)
+
+    assert get_bucket_state(limiter, "user1") == Bucket(level=1, last_ts=10)
+
+
+def test_allow_request_does_not_modify_original_limiter():
+    original = create_rate_limiter(5, 1.0)
+
+    _, after_first = allow_request(original, "user1", 0)
+    _, after_second = allow_request(after_first, "user1", 0)
+
+    assert len(original.buckets) == 0
+    assert after_first.buckets["user1"].level == 1
+    assert after_second.buckets["user1"].level == 2
+
+
+def test_limiter_cannot_be_mutated():
+    limiter = create_rate_limiter(5, 1.0)
+
+    with pytest.raises(TypeError):
+        limiter.buckets["user1"] = Bucket(level=0, last_ts=0)
+    with pytest.raises(FrozenInstanceError):
+        limiter.capacity = 10

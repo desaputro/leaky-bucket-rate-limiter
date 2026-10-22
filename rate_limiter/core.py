@@ -63,3 +63,8 @@ def allow_request(
 
     new_buckets = {**limiter.buckets, user_id: updated}
     return allowed, replace(limiter, buckets=MappingProxyType(new_buckets))
+
+
+def get_bucket_state(limiter: RateLimiter, user_id: str) -> Bucket | None:
+    """Return the user's last recorded bucket, or None if they never made a request."""
+    return limiter.buckets.get(user_id)
