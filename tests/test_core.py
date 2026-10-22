@@ -155,3 +155,11 @@ def test_limiter_cannot_be_mutated():
         limiter.buckets["user1"] = Bucket(level=0, last_ts=0)
     with pytest.raises(FrozenInstanceError):
         limiter.capacity = 10
+
+
+@pytest.mark.parametrize("bad_timestamp", [float("nan"), float("inf"), float("-inf")])
+def test_non_finite_timestamp_raises(bad_timestamp):
+    limiter = create_rate_limiter(5, 1.0)
+
+    with pytest.raises(ValueError):
+        allow_request(limiter, "user1", bad_timestamp)

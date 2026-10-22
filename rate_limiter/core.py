@@ -1,3 +1,4 @@
+import math
 from collections.abc import Mapping
 from dataclasses import dataclass, replace
 from types import MappingProxyType
@@ -40,7 +41,7 @@ def create_rate_limiter(capacity: float, leak_rate: float) -> RateLimiter:
 
 
 def _leak(bucket: Bucket, now: float, leak_rate: float) -> Bucket:
-    """Return the bucket drained up to `now`; time never runs backwards"""
+    """Return the bucket drained up to `now`; time never runs backwards."""
     elapsed = max(0, now - bucket.last_ts)
     level = max(0, bucket.level - elapsed * leak_rate)
     return Bucket(
@@ -52,7 +53,13 @@ def _leak(bucket: Bucket, now: float, leak_rate: float) -> Bucket:
 def allow_request(
     limiter: RateLimiter, user_id: str, timestamp: float
 ) -> tuple[bool, RateLimiter]:
-    """what it returns, (allowed, new_limiter), and that the input limiter is not modified."""
+    """Decide whether a request fits in the user's bucket.
+
+    Returns (allowed, new_limiter). The given limiter is never modified.
+    Raises ValueError if timestamp is NaN or infinite.
+    """
+    if not math.isfinite(timestamp):
+        raise ValueError(f"timestamp must be a finite number, got {timestamp}")
     current = limiter.buckets.get(user_id)
     if current is None:
         current = Bucket(level=0, last_ts=timestamp)
